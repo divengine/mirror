@@ -20,15 +20,52 @@ namespace divengine;
  * 
  * @package divengine/mirror
  * @author Rafa Rodriguez @rafageist [https://rafageist.com]
- * @link    https://divengine.org
+ * @link   https://divengine.org
  */
 
- class mirror
+class mirror
 {
+	/**
+	 * The version of the library.
+	 * 
+	 * @var string
+	 */
 	private static string $__version = '1.0.0';
-	private static $server = null;
-	static $classesToExpose = [];
-	static $functionsToExpose = [];
+
+	/**
+	 * The server to call.
+	 * 
+	 * @var string
+	 */
+	private static ?string $server = null;
+
+	/**
+	 * The classes to expose.
+	 * 
+	 * @var array
+	 */
+	private static array $classesToExpose = [];
+
+	/**
+	 * The functions to expose.
+	 * 
+	 * @var array
+	 */
+	private static array $functionsToExpose = [];
+
+	/**
+	 * The classes to generate.
+	 * 
+	 * @var array
+	 */
+	private static array $classesToGenerate = [];
+
+	/**
+	 * The functions to generate.
+	 * 
+	 * @var array
+	 */
+	private static array $functionsToGenerate = [];
 
 	/**
 	 * Get the version of the library.
@@ -49,6 +86,91 @@ namespace divengine;
 	public static function setServer(string $server): void
 	{
 		self::$server = $server;
+	}
+
+	/**
+	 * Get the server to call.
+	 * 
+	 * @return string
+	 */
+	public static function getServer(): string
+	{
+		return self::$server;
+	}
+
+	/**
+	 * Get the classes to expose.
+	 * 
+	 * @return array
+	 */
+	public static function getClassesToExpose(): array
+	{
+		return self::$classesToExpose;
+	}
+
+	/**
+	 * Get the functions to expose.
+	 * 
+	 * @return array
+	 */
+	public static function getFunctionsToExpose(): array
+	{
+		return self::$functionsToExpose;
+	}
+
+	/**
+	 * Get the classes to generate.
+	 * 
+	 * @return array
+	 */	
+	public static function getClassesToGenerate(): array
+	{
+		return self::$classesToGenerate;
+	}
+
+	/**
+	 * Get the functions to generate.
+	 * 
+	 * @return array
+	 */
+	public static function getFunctionsToGenerate(): array
+	{
+		return self::$functionsToGenerate;
+	}
+
+	/**
+	 * Clear the classes to expose.
+	 * 
+	 * @return void
+	 */
+	public static function clearClassesToExpose(): void
+	{
+		self::$classesToExpose = [];
+	}
+
+	public static function clearFunctionsToExpose(): void
+	{
+		self::$functionsToExpose = [];
+	}
+
+	/**
+	 * Clear the classes to generate.
+	 * 
+	 * @return void
+	 */
+	public static function clearClassesToGenerate(): void
+	{
+		self::$classesToGenerate = [];
+	}
+
+	/**
+	 * Clear the functions to generate.
+	 * 
+	 * @return void
+	 */
+	public static function clearFunctionsToGenerate(): void
+	{
+		self::$functionsToGenerate = [];
 	}
 
 	/**
@@ -123,9 +245,9 @@ namespace divengine;
 	 * Expose a class or function by page.
 	 * 
 	 * @param int $page
-	 * @return bool|string
+	 * @return string
 	 */
-	public static function expose(int $page = 1): bool|string
+	public static function expose(int $page = 1): string
 	{
 		$kind = null;
 		$totalFunctions = count(self::$functionsToExpose);
@@ -136,10 +258,12 @@ namespace divengine;
 			$kind = 'function';
 			$element = self::$functionsToExpose[$page - 1];
 		}
-
-		if ($page > $totalFunctions && $page <= $totalPages) {
+		elseif ($page <= $totalPages) {
 			$kind = 'class';
 			$element = self::$classesToExpose[$page - $totalFunctions - 1];
+		}
+		else {
+			return ''; // json_decode('') == NULL
 		}
 
 		return json_encode([
@@ -188,7 +312,7 @@ namespace divengine;
 
 		$ch = curl_init();
 
-		curl_setopt($ch, CURLOPT_URL, self::$server . '?call=true');
+		curl_setopt($ch, CURLOPT_URL, self::$server);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt($ch, CURLOPT_POST, 1);
 		curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
@@ -205,14 +329,18 @@ namespace divengine;
 	/**
 	 * Receive a call from a remote method or function.
 	 * 
-	 * @return object
+	 * @return object|null
 	 */
-	public static function receiveCall()
+	public static function listen(string $json = null): object|null
 	{
-		$payload = @json_decode(file_get_contents('php://input'));
+		if ($json == null) {
+			$json = file_get_contents('php://input');
+		}
+
+		$payload = @json_decode($json);
 
 		if (empty($payload)) {
-			return;
+			return null;
 		}
 
 		$class = $payload->class;
@@ -236,86 +364,75 @@ namespace divengine;
 		];
 	}
 
-
 	/**
 	 * Discover classes and functions from a remote server.
 	 * 
-	 * @param mixed $server
-	 * @return array[]
+	 * @param string $url
+	 * @param int $page
+	 * 
+	 * @return bool
 	 */
-	public static function discover($server): array
-	{
-		$classes = [];
-		$functions = [];
+	public static function discover(string $url, string $payload = ''): bool
+	{	
+		$ch = curl_init();
 
-		$page = 1;
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt($ch, CURLOPT_POST, 1);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
 
-		do {
-			$payload = json_encode([
-				'page' => $page
-			]);
+		$response = curl_exec($ch);
 
-			$ch = curl_init();
+		$discover = json_decode($response, true);
 
-			curl_setopt($ch, CURLOPT_URL, $server . '?expose=true');
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-			curl_setopt($ch, CURLOPT_POST, 1);
-			curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+		if ($discover === null) {
+			return false;
+		}
 
-			$response = curl_exec($ch);
+		self::$classesToGenerate = array_merge(self::$classesToGenerate, array_filter($discover['elements'], function ($element) {
+			return $element['kind'] == 'class';
+		}));
 
-			$discover = json_decode($response, true);
+		self::$functionsToGenerate = array_merge(self::$functionsToGenerate, array_filter($discover['elements'], function ($element) {
+			return $element['kind'] == 'function';
+		}));
 
-			$classes = array_merge($classes, array_filter($discover['elements'], function ($element) {
-				return $element['kind'] == 'class';
-			}));
-
-			$functions = array_merge($functions, array_filter($discover['elements'], function ($element) {
-				return $element['kind'] == 'function';
-			}));
-
-			$page++;
-		} while ($page <= $discover['totalPages']);
-
-		return [
-			'classes' => $classes,
-			'functions' => $functions
-		];
+		return true;
 	}
 
 	/**
 	 * Generate a PHP file from a model.
 	 * 
-	 * @param mixed $model
 	 * @param mixed $namespace
 	 * @return string
 	 */
-	public static function generate($model, $namespace = null): string
+	public static function generate(?string $namespace = null): string
 	{
 		$namespaceDeclaration = $namespace ? "namespace $namespace {\n" : '';
-
-		$classes = $model['classes'];
-		$functions = $model['functions'];
-
-		$code = '';
 		$code = "<?php\n\n";
+		$code .= "/**\n";
+		$code .= " * This file was generated by divengine/mirror\n";
+		$code .= " * \n";
+		$code .= " * Do not modify this file, changes will be lost.\n";
+		$code .= " */\n\n";
 		$code .= $namespaceDeclaration;
-		$code .= "use divengine\mirror;\n\n";
+		$code .= "\tuse divengine\mirror;\n\n";
 
-		foreach ($classes as $class) {
+		// Generate classes
+		foreach (self::$classesToGenerate as $class) {
 			$classInfo = $class['info'];
-			$classCode = "class {$classInfo['class']} {\n";
+			$classCode = "\n\tclass {$classInfo['class']} {\n";
 
 			foreach ($classInfo['properties'] as $property) {
 				$modifiers = $property['modifiers'] ? implode(' ', $property['modifiers']) . ' ' : '';
-				$classCode .= "\t{$modifiers} \${$property['name']} = " . var_export(unserialize($property['default']), true) . ";\n";
+				$classCode .= "\t\t{$modifiers} \${$property['name']} = " . var_export(unserialize($property['default']), true) . ";\n";
 			}
 
 			foreach ($classInfo['methods'] as $method) {
 				$returnType = $method['returnType'] ? ": {$method['returnType']}" : '';
 				$modifiers = $method['modifiers'] ? implode(' ', $method['modifiers']) . ' ' : '';
 
-				$classCode .= "\t{$modifiers} function {$method['name']} (";
+				$classCode .= "\t\t{$modifiers} function {$method['name']} (";
 
 				$paramStrings = [];
 				foreach ($method['parameters'] as $param) {
@@ -329,28 +446,28 @@ namespace divengine;
 				$classCode .= implode(', ', $paramStrings) . ") $returnType {\n";
 
 				if ($method['name'] == "__construct") {
-					$classCode .= "        \$result = mirror::call('{$classInfo['class']}::{$method['name']}', func_get_args(), \$this);\n";
+					$classCode .= "\t\t\t\$result = mirror::call('{$classInfo['class']}::{$method['name']}', func_get_args(), \$this);\n";
 					foreach ($classInfo['properties'] as $property) {
-						$classCode .= "        \$this->{$property['name']} = \$result->{$property['name']};\n";
+						$classCode .= "\t\t\t\$this->{$property['name']} = \$result->{$property['name']};\n";
 					}
 				} else {
 					$isStatic = in_array('static', $method['modifiers']);
 					$instance = $isStatic ? '' : ', $this';
-					$classCode .= "        return mirror::call('{$classInfo['class']}::{$method['name']}', func_get_args()$instance);\n";
+					$classCode .= "\t\t\treturn mirror::call('{$classInfo['class']}::{$method['name']}', func_get_args()$instance);\n";
 				}
 
-				$classCode .= "    }\n";
+				$classCode .= "\t\t}\n";
 			}
 
-			$classCode .= "}\n";
-
+			$classCode .= "\t}\n";
 			$code .= $classCode;
 		}
 
-		foreach ($functions as $function) {
+		// Generate functions
+		foreach (self::$functionsToGenerate as $function) {
 			$functionInfo = $function['info'];
 
-			$functionCode = "function {$functionInfo['name']} (";
+			$functionCode = "\n\tfunction {$functionInfo['name']} (";
 			$paramStrings = [];
 			foreach ($functionInfo['parameters'] as $param) {
 				$paramString = '$' . $param['name'];
@@ -361,11 +478,8 @@ namespace divengine;
 			}
 
 			$functionCode .= implode(', ', $paramStrings) . ") {\n";
-
-			$functionCode .= "    return mirror::call('" . $functionInfo['name'] . "', func_get_args());\n";
-
-			$functionCode .= "}\n";
-
+			$functionCode .= "\t\treturn mirror::call('" . $functionInfo['name'] . "', func_get_args());\n";
+			$functionCode .= "\t}\n";
 			$code .= $functionCode;
 		}
 
