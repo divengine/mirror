@@ -1,0 +1,31 @@
+{
+    "name": "divengine/mirror",
+    "license": "GPL-3.0-or-later",
+    "description": "Div PHP Mirror",
+    "keywords": [
+        "remote procedure call",
+        "class generator",
+        "application server"
+    ],
+    "homepage": "https://divengine.org",
+    "version": "1.0.0",
+    "authors": [
+        {
+            "name": "Rafa Rodriguez",
+            "email": "rafageist@divengine.com",
+            "homepage": "https://rafageist.com",
+            "role": "Author"
+        }
+    ],
+    "require": {
+        "php": ">=8.0.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "divengine\\": "src/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.3"
+    }
+}
